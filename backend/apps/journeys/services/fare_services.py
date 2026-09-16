@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from django.utils import timezone
 from apps.journeys.models import TransportType
-from apps.routes.services.map_service import get_map_provider
+from apps.routes.services.map_services import get_map_provider
 from apps.providers.models import Provider, ProviderAvailability
 
 # Base fare structure — backend-configurable, never hard-coded in the client

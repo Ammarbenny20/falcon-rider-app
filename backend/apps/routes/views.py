@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from apps.routes.services.map_service import get_map_provider
+from apps.routes.services.map_services import get_map_provider
 from apps.routes.models import Route
 
 

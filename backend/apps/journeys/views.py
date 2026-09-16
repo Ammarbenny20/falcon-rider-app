@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -8,7 +9,21 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from apps.journeys.models import Journey
 from apps.journeys.serializers import JourneySerializer, JourneyCreateSerializer
 from apps.journeys.services import journey_service
+from apps.journeys.services.fare_services import get_quotes
 from permissions.roles import IsPassenger, IsProvider, IsJourneyOwnerPassenger, IsJourneyOwnerProvider
+
+
+class JourneyQuoteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        origin = request.data["origin"]
+        destination = request.data["destination"]
+        quotes = get_quotes(
+            (float(origin["lat"]), float(origin["lng"])),
+            (float(destination["lat"]), float(destination["lng"])),
+        )
+        return Response([q.__dict__ for q in quotes])
 
 
 class JourneyViewSet(viewsets.ModelViewSet):

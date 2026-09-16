@@ -1,10 +1,14 @@
 from rest_framework.views import APIView
+from rest_framework import viewsets, mixins
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db.models import Sum, Count
 
 from permissions.roles import IsAdminRole
 from apps.accounts.models import User
+from apps.accounts.serializers import UserSerializer
 from apps.providers.models import Provider, VerificationStatus
 from apps.vehicles.models import Vehicle, VehicleStatus
 from apps.journeys.models import Journey, JourneyStatus
@@ -52,15 +56,7 @@ class AdminOverviewView(APIView):
                 "open_support_tickets": SupportTicket.objects.exclude(status__in=["RESOLVED", "CLOSED"]).count(),
                 "bus_bookings_needing_action": BusBooking.objects.filter(status="NEEDS_ACTION").count(),
             },
-        }) 
-        from rest_framework import viewsets, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-
-from apps.accounts.models import User
-from apps.accounts.serializers import UserSerializer
-from permissions.roles import IsAdminRole
+        })
 
 
 class AdminUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -92,7 +88,10 @@ class AdminUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewset
         from apps.administration.models import AuditLog
         AuditLog.objects.create(
             actor=admin_user, action=action_name, entity="User", entity_id=str(target_user.id)
-        class LiveOperationsView(APIView):
+        )
+
+
+class LiveOperationsView(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
@@ -117,9 +116,7 @@ class AdminUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewset
                 "provider_position": {
                     "lat": float(provider.current_lat) if provider and provider.current_lat else None,
                     "lng": float(provider.current_lng) if provider and provider.current_lng else None,
-                    # Explicit, honest label — never claim real GPS until it's real.
                     "is_simulated": provider.is_location_simulated if provider else True,
                 } if provider else None,
             })
         return Response(results)
-        )
