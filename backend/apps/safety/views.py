@@ -1,49 +1,69 @@
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+﻿import secrets
+from datetime import timedelta
+
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.safety.models import SafetyIncident, TrustedContact
-from apps.safety.serializers import SafetyIncidentSerializer, TrustedContactSerializer
-from permissions.roles import IsAdminRole
-
-
-class TrustedContactViewSet(viewsets.ModelViewSet):
-    serializer_class = TrustedContactSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return TrustedContact.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+from .models import EmergencyContact, SosAlert, TripShare
+from apps.accounts.notifications_service import notify_sos_alert
+from .serializers import (
+    EmergencyContactSerializer, SosAlertSerializer, TripShareSerializer,
+)
 
 
-class SafetyIncidentViewSet(viewsets.ModelViewSet):
-    serializer_class = SafetyIncidentSerializer
-    permission_classes = [IsAuthenticated]
+class EmergencyContactListCreateView(APIView):
+    def get(self, request):
+        qs = EmergencyContact.objects.filter(user=request.user)
+        return Response(EmergencyContactSerializer(qs, many=True).data)
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == "ADMIN":
-            return SafetyIncident.objects.all().order_by("-created_at")
-        return SafetyIncident.objects.filter(reported_by=user).order_by("-created_at")
+    def post(self, request):
+        serializer = EmergencyContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def perform_create(self, serializer):
-        journey = serializer.validated_data["journey"]
-        serializer.save(
-            reported_by=self.request.user,
-            passenger=journey.passenger,
-            provider=journey.provider,
-            vehicle=journey.vehicle,
+
+class SosAlertCreateView(APIView):
+    def post(self, request):
+        journey_id = request.data.get("journey_id")
+        lat = request.data.get("latitude")
+        lng = request.data.get("longitude")
+        message = request.data.get("message", "")
+
+        loc = f"{float(lng)},{float(lat)}" if (lat and lng) else None
+
+        alert = SosAlert.objects.create(
+            user=request.user,
+            journey_id=journey_id,
+            location=loc,
+            message=message,
         )
+        try:
+            notify_sos_alert(alert)
+        except Exception:
+            pass
+        return Response(SosAlertSerializer(alert).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsAdminRole])
-    def resolve(self, request, pk=None):
-        incident = self.get_object()
-        incident.status = SafetyIncident.Status.RESOLVED
-        incident.resolution_notes = request.data.get("notes", "")
-        incident.resolved_at = timezone.now()
-        incident.save(update_fields=["status", "resolution_notes", "resolved_at"])
-        return Response(SafetyIncidentSerializer(incident).data)
+
+class TripShareCreateView(APIView):
+    def post(self, request):
+        journey_id = request.data.get("journey_id")
+        phone = request.data.get("shared_with_phone")
+        if not journey_id or not phone:
+            return Response(
+                {"detail": "journey_id and shared_with_phone are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token = secrets.token_urlsafe(32)
+        share = TripShare.objects.create(
+            journey_id=journey_id,
+            shared_with_phone=phone,
+            share_token=token,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+        return Response(TripShareSerializer(share).data, status=status.HTTP_201_CREATED)
+
+

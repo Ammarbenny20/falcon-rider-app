@@ -1,0 +1,101 @@
+"""
+Matching engine: finds candidate JourneyPlans for a RiderRequest,
+scores them, and creates MatchProposals for the top matches.
+"""
+
+from datetime import timedelta
+
+from django.contrib.gis.geos import Point
+from django.utils import timezone
+
+from apps.journey_plans.models import JourneyPlan
+from apps.matching.models import MatchProposal
+from apps.rider_requests.models import RiderRequest
+
+from .scoring import compute_fare_share, compute_match_score
+
+
+# How many top proposals to create per request
+MAX_PROPOSALS_PER_REQUEST = 5
+
+# Proposal lifetime
+PROPOSAL_TTL_MINUTES = 30
+
+# How far into the future to look for JourneyPlans (rough pre-filter)
+SEARCH_WINDOW_HOURS = 6
+
+
+def find_matches_for_request(rider_request_id) -> int:
+    """
+    Find matching JourneyPlans for the given RiderRequest, score them,
+    and create MatchProposals. Returns the number of proposals created.
+
+    Hard filters (applied at query level for efficiency):
+        - JourneyPlan.status == PUBLISHED
+        - available_seats >= rider_request.seats_needed
+        - scheduled_departure_time within ±SEARCH_WINDOW_HOURS of requested_time
+    """
+    try:
+        rr = RiderRequest.objects.get(pk=rider_request_id)
+    except RiderRequest.DoesNotExist:
+        return 0
+
+    if rr.status in ("CANCELLED", "FULFILLED", "BOOKED"):
+        return 0
+
+    # Update status to MATCHING while we work
+    rr.status = "MATCHING"
+    rr.save(update_fields=["status", "updated_at"])
+
+    # Time window
+    window_start = rr.requested_time - timedelta(hours=SEARCH_WINDOW_HOURS)
+    window_end = rr.requested_time + timedelta(hours=SEARCH_WINDOW_HOURS)
+
+    # Query candidates
+    candidates = JourneyPlan.objects.filter(
+        status="PUBLISHED",
+        available_seats__gte=rr.seats_needed,
+        scheduled_departure_time__gte=window_start,
+        scheduled_departure_time__lte=window_end,
+    ).select_related("provider", "vehicle")
+
+    # Score
+    scored = []
+    for plan in candidates:
+        score = compute_match_score(rr, plan)
+        if score is not None and score > 0:
+            scored.append((score, plan))
+
+    # Sort by score desc, then by earliest departure
+    scored.sort(key=lambda x: (-x[0], x[1].scheduled_departure_time))
+
+    # Take top N
+    top = scored[:MAX_PROPOSALS_PER_REQUEST]
+
+    expires_at = timezone.now() + timedelta(minutes=PROPOSAL_TTL_MINUTES)
+    created = 0
+
+    # Delete existing proposals for this request (idempotency on retry)
+    MatchProposal.objects.filter(rider_request=rr, status="PROPOSED").delete()
+
+    for score, plan in top:
+        # Proposed pickup: use journey_plan.origin for now
+        # (in a real system we'd compute the closest point on the route)
+        proposed_pickup = plan.scheduled_departure_time
+
+        MatchProposal.objects.create(
+            rider_request=rr,
+            journey_plan=plan,
+            match_score=score,
+            proposed_fare_share=compute_fare_share(rr, plan),
+            proposed_pickup_time=proposed_pickup,
+            status="PROPOSED",
+            expires_at=expires_at,
+        )
+        created += 1
+
+    # Update request status
+    rr.status = "MATCHED" if created > 0 else "NO_MATCH_FOUND"
+    rr.save(update_fields=["status", "updated_at"])
+
+    return created

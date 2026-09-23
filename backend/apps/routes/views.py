@@ -1,43 +1,18 @@
-from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from apps.routes.services.map_services import get_map_provider
-from apps.routes.models import Route
+from rest_framework.views import APIView
+
+from .services.geocoding_service import geocode
+from .services.mapbox_client import directions
 
 
 class GeocodeView(APIView):
-    permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        query = request.query_params.get("q", "")
-        if not query:
-            return Response({"results": []})
-        results = get_map_provider().geocode(query)
-        return Response({"results": [r.__dict__ for r in results]})
+        q = request.query_params.get("q", "")
+        return Response({"results": geocode(q)})
 
 
-class RouteCalculateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class DirectionsView(APIView):
     def post(self, request):
-        origin = request.data["origin"]  # {lat, lng}
-        destination = request.data["destination"]
-
-        route_result = get_map_provider().calculate_route(
-            (float(origin["lat"]), float(origin["lng"])),
-            (float(destination["lat"]), float(destination["lng"])),
-        )
-        Route.objects.create(
-            origin_lat=origin["lat"], origin_lng=origin["lng"],
-            destination_lat=destination["lat"], destination_lng=destination["lng"],
-            distance_meters=route_result.distance_meters,
-            duration_min_seconds=route_result.duration_min_seconds,
-            duration_max_seconds=route_result.duration_max_seconds,
-            polyline=route_result.polyline,
-        )
-        return Response({
-            "distance_meters": route_result.distance_meters,
-            "duration_min_seconds": route_result.duration_min_seconds,
-            "duration_max_seconds": route_result.duration_max_seconds,
-            "polyline": route_result.polyline,
-        })
+        origin = request.data.get("origin", {})
+        destination = request.data.get("destination", {})
+        return Response(directions(origin, destination))

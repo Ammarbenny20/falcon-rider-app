@@ -1,16 +1,23 @@
 from rest_framework import serializers
-from apps.safety.models import SafetyIncident, TrustedContact
+
+from core.fields import LocationField
+
+from .models import EmergencyContact, SosAlert, TripShare
 
 
-class TrustedContactSerializer(serializers.ModelSerializer):
+class EmergencyContactSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TrustedContact
-        fields = "__all__"
-        read_only_fields = ["id", "user", "created_at"]
+        model = EmergencyContact
+        fields = ["id", "name", "phone_number", "relationship", "created_at"]
 
 
-class SafetyIncidentSerializer(serializers.ModelSerializer):
+class SosAlertSerializer(serializers.ModelSerializer):
     class Meta:
-        model = SafetyIncident
-        fields = "__all__"
-        read_only_fields = ["id", "reported_by", "passenger", "provider", "vehicle", "status", "created_at", "resolved_at"]
+        model = SosAlert
+        fields = ["id", "journey", "location", "message", "resolved", "created_at"]
+
+
+class TripShareSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TripShare
+        fields = ["id", "journey", "shared_with_phone", "share_token", "expires_at", "created_at"]

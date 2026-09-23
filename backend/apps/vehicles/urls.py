@@ -1,6 +1,9 @@
-from rest_framework.routers import DefaultRouter
-from apps.vehicles.views import VehicleViewSet
+from django.urls import path
 
-router = DefaultRouter()
-router.register(r"vehicles", VehicleViewSet, basename="vehicle")
-urlpatterns = router.urls
+from .views import VehicleListCreateView, VehicleDetailView
+
+
+urlpatterns = [
+    path("vehicles/", VehicleListCreateView.as_view(), name="vehicle-list"),
+    path("vehicles/<uuid:pk>/", VehicleDetailView.as_view(), name="vehicle-detail"),
+]

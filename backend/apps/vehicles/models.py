@@ -1,44 +1,30 @@
 import uuid
 from django.db import models
-from apps.providers.models import Provider, VerificationStatus
 
 
-class VehicleStatus(models.TextChoices):
-    ACTIVE = "ACTIVE", "Active"
-    INACTIVE = "INACTIVE", "Inactive"
-    PENDING_VERIFICATION = "PENDING_VERIFICATION", "Pending Verification"
-    SUSPENDED = "SUSPENDED", "Suspended"
+class TransportType(models.TextChoices):
+    BODA_BODA = "BODA_BODA", "Boda Boda"
+    BAJAI = "BAJAI", "Bajaji"
+    CAR = "CAR", "Car"
+    BUS = "BUS", "Bus"
 
 
 class Vehicle(models.Model):
-    class VehicleType(models.TextChoices):
-        BODA_BODA = "BODA_BODA", "Boda Boda"
-        BAJAJI = "BAJAJI", "Bajaji"
-        CAR = "CAR", "Car"
-        BUS = "BUS", "Bus"
-        SHUTTLE = "SHUTTLE", "Shuttle"
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, related_name="vehicles")
-    vehicle_type = models.CharField(max_length=20, choices=VehicleType.choices)
-    plate_number = models.CharField(max_length=20, unique=True)
-    make = models.CharField(max_length=50, blank=True)
-    model = models.CharField(max_length=50, blank=True)
-    capacity = models.PositiveSmallIntegerField(default=1)
-    status = models.CharField(max_length=25, choices=VehicleStatus.choices, default=VehicleStatus.PENDING_VERIFICATION)
-    verification_status = models.CharField(
-        max_length=25, choices=VerificationStatus.choices, default=VerificationStatus.NOT_STARTED
-    )
-    is_primary = models.BooleanField(default=False)
-    documents = models.JSONField(default=dict, blank=True)
+    provider = models.ForeignKey("accounts.ProviderProfile", on_delete=models.CASCADE, related_name="vehicles")
+    transport_type = models.CharField(max_length=20, choices=TransportType.choices)
+    make = models.CharField(max_length=50)
+    model = models.CharField(max_length=50)
+    year = models.IntegerField()
+    license_plate = models.CharField(max_length=20, unique=True)
+    capacity = models.PositiveIntegerField()
+    color = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=["provider", "status"])]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["provider"], condition=models.Q(is_primary=True),
-                name="one_primary_vehicle_per_provider"
-            )
-        ]
+        db_table = "vehicles_vehicle"
+
+    def __str__(self):
+        return f"{self.make} {self.model} ({self.license_plate})"

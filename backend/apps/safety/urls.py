@@ -1,7 +1,13 @@
-from rest_framework.routers import DefaultRouter
-from apps.safety.views import SafetyIncidentViewSet, TrustedContactViewSet
+from django.urls import path
 
-router = DefaultRouter()
-router.register(r"safety/incidents", SafetyIncidentViewSet, basename="safety-incident")
-router.register(r"safety/trusted-contacts", TrustedContactViewSet, basename="trusted-contact")
-urlpatterns = router.urls
+from .views import (
+    EmergencyContactListCreateView,
+    SosAlertCreateView,
+    TripShareCreateView,
+)
+
+urlpatterns = [
+    path("safety/emergency-contacts/", EmergencyContactListCreateView.as_view(), name="emergency-contacts"),
+    path("safety/sos/", SosAlertCreateView.as_view(), name="sos-alert"),
+    path("safety/trip-share/", TripShareCreateView.as_view(), name="trip-share"),
+]

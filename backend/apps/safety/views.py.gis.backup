@@ -1,0 +1,68 @@
+import secrets
+from datetime import timedelta
+
+from django.contrib.gis.geos import Point
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import EmergencyContact, SosAlert, TripShare
+from apps.accounts.notifications_service import notify_sos_alert
+from .serializers import (
+    EmergencyContactSerializer, SosAlertSerializer, TripShareSerializer,
+)
+
+
+class EmergencyContactListCreateView(APIView):
+    def get(self, request):
+        qs = EmergencyContact.objects.filter(user=request.user)
+        return Response(EmergencyContactSerializer(qs, many=True).data)
+
+    def post(self, request):
+        serializer = EmergencyContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class SosAlertCreateView(APIView):
+    def post(self, request):
+        journey_id = request.data.get("journey_id")
+        lat = request.data.get("latitude")
+        lng = request.data.get("longitude")
+        message = request.data.get("message", "")
+
+        loc = Point(float(lng), float(lat), srid=4326) if (lat and lng) else None
+
+        alert = SosAlert.objects.create(
+            user=request.user,
+            journey_id=journey_id,
+            location=loc,
+            message=message,
+        )
+        try:
+            notify_sos_alert(alert)
+        except Exception:
+            pass
+        return Response(SosAlertSerializer(alert).data, status=status.HTTP_201_CREATED)
+
+
+class TripShareCreateView(APIView):
+    def post(self, request):
+        journey_id = request.data.get("journey_id")
+        phone = request.data.get("shared_with_phone")
+        if not journey_id or not phone:
+            return Response(
+                {"detail": "journey_id and shared_with_phone are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token = secrets.token_urlsafe(32)
+        share = TripShare.objects.create(
+            journey_id=journey_id,
+            shared_with_phone=phone,
+            share_token=token,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+        return Response(TripShareSerializer(share).data, status=status.HTTP_201_CREATED)

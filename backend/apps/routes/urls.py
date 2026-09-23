@@ -1,7 +1,8 @@
 from django.urls import path
-from apps.routes.views import GeocodeView, RouteCalculateView
+
+from .views import GeocodeView, DirectionsView
 
 urlpatterns = [
-    path("routes/geocode/", GeocodeView.as_view(), name="geocode"),
-    path("routes/calculate/", RouteCalculateView.as_view(), name="route-calculate"),
+    path("routes/geocode/", GeocodeView.as_view(), name="routes-geocode"),
+    path("routes/directions/", DirectionsView.as_view(), name="routes-directions"),
 ]

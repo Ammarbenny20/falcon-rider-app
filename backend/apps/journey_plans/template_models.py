@@ -1,0 +1,40 @@
+﻿import uuid
+from django.db import models as gis_models
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
+
+
+class JourneyTemplate(models.Model):
+    """
+    A reusable recurring journey definition. Celery generates JourneyPlan
+    instances from active templates each day.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        "accounts.ProviderProfile", on_delete=models.CASCADE,
+        related_name="journey_templates",
+    )
+    vehicle = models.ForeignKey(
+        "vehicles.Vehicle", on_delete=models.PROTECT,
+        related_name="journey_templates",
+    )
+    name = models.CharField(max_length=100)
+    origin = models.CharField(max_length=100, blank=True, null=True)
+    origin_label = models.CharField(max_length=255)
+    destination = models.CharField(max_length=100, blank=True, null=True)
+    destination_label = models.CharField(max_length=255)
+    days_of_week = ArrayField(models.IntegerField())
+    departure_time = models.TimeField()
+    total_seats = models.IntegerField()
+    price_per_seat = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "journey_plans_template"
+        indexes = [models.Index(fields=["is_active"])]
+
+    def __str__(self):
+        return f"JourneyTemplate<{self.name}>"
+

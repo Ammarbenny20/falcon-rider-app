@@ -1,1 +1,0 @@
-from apps.journeys.services import journey_services as journey_service

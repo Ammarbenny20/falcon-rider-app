@@ -1,102 +1,171 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.views import APIView
-from rest_framework.response import Response
+﻿from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
-from django.core.exceptions import ValidationError, PermissionDenied
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.journeys.models import Journey
-from apps.journeys.serializers import JourneySerializer, JourneyCreateSerializer
-from apps.journeys.services import journey_service
-from apps.journeys.services.fare_services import get_quotes
-from permissions.roles import IsPassenger, IsProvider, IsJourneyOwnerPassenger, IsJourneyOwnerProvider
+from core.permissions import IsProvider
+from apps.accounts.notifications_service import (
+    notify_journey_started, notify_journey_completed, notify_journey_cancelled,
+)
 
+from apps.bookings.models import Booking
 
-class JourneyQuoteView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        origin = request.data["origin"]
-        destination = request.data["destination"]
-        quotes = get_quotes(
-            (float(origin["lat"]), float(origin["lng"])),
-            (float(destination["lat"]), float(destination["lng"])),
-        )
-        return Response([q.__dict__ for q in quotes])
+from .models import Journey
+from .serializers import JourneySerializer
 
 
-class JourneyViewSet(viewsets.ModelViewSet):
-    serializer_class = JourneySerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["status", "transport_type", "payment_status"]
+def _is_participant(user, journey):
+    """A user is a participant if they're the provider or have a booking on the plan."""
+    if user.role == "PROVIDER":
+        if journey.journey_plan.provider.user_id == user.id:
+            return True
+    if user.role == "PASSENGER":
+        return Booking.objects.filter(
+            journey_plan=journey.journey_plan,
+            passenger__user=user,
+        ).exists()
+    return False
 
-    def get_queryset(self):
-        user = self.request.user
-        # Role-scoped visibility — admins see all, others see only their own.
-        if user.role == "ADMIN":
-            return Journey.objects.all().order_by("-requested_at")
-        if user.role == "PROVIDER":
-            provider = getattr(user, "provider_profile", None)
-            return Journey.objects.filter(provider=provider).order_by("-requested_at")
-        return Journey.objects.filter(passenger=user).order_by("-requested_at")
 
-    def get_serializer_class(self):
-        if self.action == "create":
-            return JourneyCreateSerializer
-        return JourneySerializer
-
-    def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated(), IsPassenger()]
-        if self.action in ("accept", "arrive", "start", "complete"):
-            return [IsAuthenticated(), IsProvider()]
-        return [IsAuthenticated()]
-
-    def perform_create(self, serializer):
-        serializer.save(passenger=self.request.user)
-
-    def _handle(self, service_fn, request, pk):
-        provider = getattr(request.user, "provider_profile", None)
-        if provider is None:
-            return Response({"detail": "No provider profile."}, status=status.HTTP_403_FORBIDDEN)
-        try:
-            journey = service_fn(pk, provider)
-        except ValidationError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_409_CONFLICT)
-        except PermissionDenied as e:
-            return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
+class JourneyDetailView(APIView):
+    def get(self, request, pk):
+        journey = get_object_or_404(Journey, pk=pk)
+        if not _is_participant(request.user, journey):
+            return Response({"detail": "Not found."}, status=404)
         return Response(JourneySerializer(journey).data)
 
-    @action(detail=True, methods=["post"])
-    def accept(self, request, pk=None):
-        return self._handle(journey_service.accept_journey, request, pk)
 
-    @action(detail=True, methods=["post"])
-    def arrive(self, request, pk=None):
-        return self._handle(journey_service.mark_arrived, request, pk)
+class JourneyStartView(APIView):
+    permission_classes = [IsProvider]
 
-    @action(detail=True, methods=["post"])
-    def start(self, request, pk=None):
-        return self._handle(journey_service.start_journey, request, pk)
+    def post(self, request, pk):
+        journey = get_object_or_404(
+            Journey, pk=pk,
+            journey_plan__provider__user=request.user,
+        )
+        if journey.status != "NOT_STARTED":
+            return Response(
+                {"detail": f"Journey is {journey.status}, cannot start."},
+                status=400,
+            )
+        journey.status = "IN_PROGRESS"
+        journey.actual_start_time = timezone.now()
+        journey.save(update_fields=["status", "actual_start_time", "updated_at"])
+        try:
+            notify_journey_started(journey)
+        except Exception:
+            pass
+        return Response(JourneySerializer(journey).data)
 
-    @action(detail=True, methods=["post"])
-    def complete(self, request, pk=None):
-        return self._handle(journey_service.complete_journey, request, pk)
 
-        from rest_framework.views import APIView
-from apps.journeys.services.fare_service import get_quotes
+class JourneyCompleteView(APIView):
+    permission_classes = [IsProvider]
+
+    def post(self, request, pk):
+        journey = get_object_or_404(
+            Journey, pk=pk,
+            journey_plan__provider__user=request.user,
+        )
+        if journey.status != "IN_PROGRESS":
+            return Response(
+                {"detail": f"Journey is {journey.status}, cannot complete."},
+                status=400,
+            )
+        journey.status = "COMPLETED"
+        journey.actual_end_time = timezone.now()
+        journey.save(update_fields=["status", "actual_end_time", "updated_at"])
+        try:
+            notify_journey_completed(journey)
+        except Exception:
+            pass
+        return Response(JourneySerializer(journey).data)
 
 
-class JourneyQuoteView(APIView):
+class JourneyAbortView(APIView):
+    permission_classes = [IsProvider]
+
+    def post(self, request, pk):
+        journey = get_object_or_404(
+            Journey, pk=pk,
+            journey_plan__provider__user=request.user,
+        )
+        journey.status = "ABORTED"
+        journey.save(update_fields=["status", "updated_at"])
+        try:
+            notify_journey_cancelled(journey)
+        except Exception:
+            pass
+        return Response(JourneySerializer(journey).data)
+
+
+def _haversine_km(lat1, lng1, lat2, lng2):
+    from math import radians, cos, sin, asin, sqrt
+    R = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlng = radians(lng2 - lng1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+    return 2 * R * asin(sqrt(a))
+
+
+def _eta_seconds(distance_km, avg_speed_kmh=25):
+    if distance_km <= 0:
+        return 0
+    return int((distance_km / avg_speed_kmh) * 3600)
+
+
+class JourneyLocationView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        origin = request.data["origin"]
-        destination = request.data["destination"]
-        quotes = get_quotes(
-            (float(origin["lat"]), float(origin["lng"])),
-            (float(destination["lat"]), float(destination["lng"])),
+    def post(self, request, pk):
+        journey = get_object_or_404(
+            Journey, pk=pk,
+            journey_plan__provider__user=request.user,
         )
-        return Response([q.__dict__ for q in quotes])
+        try:
+            lat = float(request.data["latitude"])
+            lng = float(request.data["longitude"])
+        except (KeyError, TypeError, ValueError):
+            return Response({"detail": "latitude and longitude are required."}, status=400)
+
+        journey.current_location = "lng,lat, srid=4326"
+        journey.save(update_fields=["current_location", "updated_at"])
+
+        dest = journey.journey_plan.destination
+        distance_km = _haversine_km(lat, lng, dest.y, dest.x)
+
+        return Response({
+            "detail": "Location updated",
+            "distance_to_destination_km": round(distance_km, 3),
+            "eta_seconds": _eta_seconds(distance_km),
+        })
+
+    def get(self, request, pk):
+        journey = get_object_or_404(Journey, pk=pk)
+        if not _is_participant(request.user, journey):
+            return Response({"detail": "Not found."}, status=404)
+
+        if not journey.current_location:
+            return Response({
+                "latitude": None,
+                "longitude": None,
+                "updated_at": journey.updated_at.isoformat(),
+                "distance_to_destination_km": None,
+                "eta_seconds": None,
+                "status": journey.status,
+            })
+
+        dest = journey.journey_plan.destination
+        lat = journey.current_location.y
+        lng = journey.current_location.x
+        distance_km = _haversine_km(lat, lng, dest.y, dest.x)
+
+        return Response({
+            "latitude": lat,
+            "longitude": lng,
+            "updated_at": journey.updated_at.isoformat(),
+            "distance_to_destination_km": round(distance_km, 3),
+            "eta_seconds": _eta_seconds(distance_km),
+            "status": journey.status,
+        })
+

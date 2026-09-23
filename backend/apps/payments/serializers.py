@@ -1,9 +1,14 @@
 from rest_framework import serializers
-from apps.payments.models import Payment
+
+from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    shared_cost_id = serializers.UUIDField(source="shared_cost.id", read_only=True)
+
     class Meta:
         model = Payment
-        fields = "__all__"
-        read_only_fields = [f.name for f in Payment._meta.fields]
+        fields = [
+            "id", "shared_cost_id", "amount", "method", "status",
+            "transaction_reference", "initiated_at", "completed_at",
+        ]

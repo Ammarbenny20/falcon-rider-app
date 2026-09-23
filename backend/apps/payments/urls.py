@@ -1,7 +1,14 @@
-from rest_framework.routers import DefaultRouter
-from apps.payments.views import PaymentViewSet, AdminPaymentsSummaryView
+from django.urls import path
 
-router = DefaultRouter()
-router.register(r"payments", PaymentViewSet, basename="payment")
-router.register(r"admin/payments-summary", AdminPaymentsSummaryView, basename="admin-payments-summary")
-urlpatterns = router.urls
+from .views import (
+    PaymentInitiateView, PaymentWebhookView,
+    PaymentConfirmDemoView, PaymentDetailView,
+)
+
+
+urlpatterns = [
+    path("payments/initiate/", PaymentInitiateView.as_view(), name="payment-initiate"),
+    path("payments/webhook/", PaymentWebhookView.as_view(), name="payment-webhook"),
+    path("payments/<uuid:pk>/confirm/", PaymentConfirmDemoView.as_view(), name="payment-confirm-demo"),
+    path("payments/<uuid:pk>/", PaymentDetailView.as_view(), name="payment-detail"),
+]

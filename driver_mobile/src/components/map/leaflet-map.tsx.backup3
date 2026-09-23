@@ -1,0 +1,124 @@
+﻿// src/components/map/leaflet-map.tsx
+//
+// Web map using Leaflet + OpenStreetMap.
+// No API token required.
+
+import { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+export interface MapMarker {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+  status?: string;
+  type?: 'PROVIDER' | 'TRIP' | 'JOURNEY' | 'INCIDENT';
+}
+
+interface LeafletMapProps {
+  markers: MapMarker[];
+  center?: { lat: number; lng: number };
+  zoom?: number;
+  height?: number;
+}
+
+const MARKER_COLORS: Record<string, string> = {
+  PROVIDER: '#10b981',
+  TRIP: '#3b82f6',
+  JOURNEY: '#6366f1',
+  INCIDENT: '#ef4444',
+};
+
+export function LeafletMap({ markers, center, zoom = 12, height = 400 }: LeafletMapProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.setAttribute('data-leaflet', 'true');
+      document.head.appendChild(link);
+    }
+
+    const initMap = async () => {
+      if (!mapRef.current) return;
+      const L = await loadLeaflet();
+
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+
+      const mapCenter = center ?? {
+        lat: markers[0]?.lat ?? -6.7924,
+        lng: markers[0]?.lng ?? 39.2083,
+      };
+
+      const map = L.map(mapRef.current).setView([mapCenter.lat, mapCenter.lng], zoom);
+      leafletMapRef.current = map;
+
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '© Esri, OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      markers.forEach((marker) => {
+        const color = MARKER_COLORS[marker.type ?? 'PROVIDER'] ?? '#6b7280';
+        const icon = L.divIcon({
+          className: 'custom-marker',
+          html: `<div style="width: 24px; height: 24px; background: ${color}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
+        const m = L.marker([marker.lat, marker.lng], { icon }).addTo(map);
+        m.bindPopup(`<div style="font-family: sans-serif; font-size: 12px;"><strong>${marker.label}</strong>${marker.status ? `<br/><span style="color: #666;">${marker.status}</span>` : ''}</div>`);
+      });
+
+      if (markers.length > 1) {
+        const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lng]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    };
+
+    initMap();
+
+    return () => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+    };
+  }, [markers, center, zoom]);
+
+  return (
+    <View style={styles.wrap}>
+      <div ref={mapRef} style={{ width: '100%', height, borderRadius: 12, overflow: 'hidden' }} />
+    </View>
+  );
+}
+
+let leafletPromise: Promise<any> | null = null;
+
+function loadLeaflet(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Browser only'));
+  if ((window as any).L) return Promise.resolve((window as any).L);
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.async = true;
+    script.onload = () => resolve((window as any).L);
+    document.body.appendChild(script);
+  });
+  return leafletPromise;
+}
+
+const styles = StyleSheet.create({
+  wrap: { width: '100%', borderRadius: 12, overflow: 'hidden' },
+});
+
+

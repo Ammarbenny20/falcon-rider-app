@@ -1,0 +1,35 @@
+﻿"""
+Falcon Rider — Development Settings
+
+Uses SQLite for dev (no GDAL/PostGIS needed).
+Switch to PostgreSQL + PostGIS for production.
+"""
+
+from .base import *
+import os
+
+DEBUG = True
+ALLOWED_HOSTS = ["*"]
+CORS_ALLOW_ALL_ORIGINS = True
+
+# ─────────────────────────────────────────
+# DATABASE
+# ─────────────────────────────────────────
+# Dev: SQLite (no PostGIS/GDAL required)
+# Production: PostgreSQL + PostGIS
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
+
+# ─────────────────────────────────────────
+# GIS (disabled for dev SQLite)
+# ─────────────────────────────────────────
+
+# Comment out PostGIS-specific settings if any
+# GDAL_LIBRARY_PATH = os.environ.get("GDAL_LIBRARY_PATH", "")
+# GEOS_LIBRARY_PATH = os.environ.get("GEOS_LIBRARY_PATH", "")
+

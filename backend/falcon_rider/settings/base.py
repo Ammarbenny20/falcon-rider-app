@@ -1,0 +1,173 @@
+﻿from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-insecure-change-me")
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+        "rest_framework",
+    "rest_framework.authtoken",
+    "corsheaders",
+    "drf_spectacular",
+
+    "apps.accounts",
+    "apps.vehicles",
+    "apps.rider_requests",
+    "apps.journey_plans",
+    "apps.matching",
+    "apps.bookings",
+    "apps.journeys",
+    "apps.payments",
+        "apps.safety",
+    "apps.disputes",    
+    "apps.refund_requests",
+    "apps.payouts",
+    "apps.receipts",
+    "apps.governance",
+    "apps.admin_ops",
+    "core",   
+]
+
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.RequestIDMiddleware",
+]
+
+ROOT_URLCONF = "falcon_rider.urls"
+WSGI_APPLICATION = "falcon_rider.wsgi.application"
+ASGI_APPLICATION = "falcon_rider.asgi.application"
+
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "DIRS": [],
+    "APP_DIRS": True,
+    "OPTIONS": {"context_processors": [
+        "django.template.context_processors.request",
+        "django.contrib.auth.context_processors.auth",
+        "django.contrib.messages.context_processors.messages",
+    ]},
+}]
+
+AUTH_USER_MODEL = "accounts.User"
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+     "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "Africa/Dar_es_Salaam"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
+    "PAGE_SIZE": 20,
+    
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+     "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/h",
+        "user": "1000/h",
+        "login": "5/m",
+        "password_reset": "3/h",
+        "otp_request": "3/m",
+    },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Falcon Rider API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TIMEZONE = "Africa/Dar_es_Salaam"
+
+# Cache backend â€” uses Redis so OTP + throttle counters work across workers.
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ.get("CACHE_URL", "redis://localhost:6379/1"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+CORS_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+CORS_ALLOW_HEADERS = [
+    "authorization", "content-type", "accept", "origin",
+    "user-agent", "x-csrftoken", "x-requested-with",
+]
+
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@falconrider.local")
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+
+PAYMENT_WEBHOOK_SECRET = os.environ.get("PAYMENT_WEBHOOK_SECRET", "dev-webhook-secret")
+
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    "generate-journey-instances": {
+        "task": "apps.journey_plans.template_tasks.generate_journey_instances",
+        "schedule": 86400.0,
+        "kwargs": {"days_ahead": 7},
+    },
+    "expire-stale-proposals": {
+        "task": "apps.matching.tasks.expiry_tasks.expire_stale_proposals",
+        "schedule": 60.0,
+    },
+    "expire-stale-requests": {
+        "task": "apps.matching.tasks.expiry_tasks.expire_stale_requests",
+        "schedule": 120.0,
+    },
+}
+
+# Demo mode: enables the /payments/{id}/confirm/ endpoint so the frontend
+# can simulate gateway success without real M-PESA credentials.
+# Set to False when the real gateway is wired up.
+PAYMENT_DEMO_MODE = os.environ.get("PAYMENT_DEMO_MODE", "True").lower() == "true"
+
+# Platform commission (percent) deducted from each booking.
+# 15% platform, 85% provider by default. Overridable via env.
+PLATFORM_COMMISSION_PERCENT = float(os.environ.get("PLATFORM_COMMISSION_PERCENT", "15.0"))
+

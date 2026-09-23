@@ -1,0 +1,988 @@
+
+================================================================================
+FILE: src/store/auth.store.ts
+================================================================================
+import { create } from 'zustand';
+
+import type { User } from '@/features/auth/types/auth.types';
+
+type AuthState = {
+  token: string | null;
+  user: User | null;
+  isHydrated: boolean;
+  setSession: (token: string, user: User) => void;
+  clearSession: () => void;
+  setHydrated: (token: string | null) => void;
+};
+
+export const useAuthStore = create<AuthState>((set) => ({
+  token: null,
+  user: null,
+  isHydrated: false,
+  setSession: (token, user) => set({ token, user }),
+  clearSession: () => set({ token: null, user: null }),
+  setHydrated: (token) => set({ token, isHydrated: true }),
+}));
+
+================================================================================
+FILE: src/hooks/use-hydrate-auth.ts
+================================================================================
+import { useEffect } from 'react';
+
+import { secureStorage } from '@/services/storage/secure-storage';
+import { useAuthStore } from '@/store/auth.store';
+
+export function useHydrateAuth() {
+  const setHydrated = useAuthStore((s) => s.setHydrated);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+
+  useEffect(() => {
+    let cancelled = false;
+    secureStorage
+      .get('auth_token')
+      .catch(() => null)
+      .then((token) => {
+        if (!cancelled) setHydrated(token ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setHydrated]);
+
+  return isHydrated;
+}
+
+================================================================================
+FILE: src/services/api/client.ts
+================================================================================
+import { env } from '@/config/env';
+import { secureStorage } from '@/services/storage/secure-storage';
+
+export class ApiError extends Error {
+  status: number;
+  fieldErrors?: Record<string, string[]>;
+
+  constructor(status: number, message: string, fieldErrors?: Record<string, string[]>) {
+    super(message);
+    this.status = status;
+    this.fieldErrors = fieldErrors;
+  }
+}
+
+function humanizeFieldName(field: string): string {
+  return field.replace(/_/g, ' ').replace(/^\w/, (char) => char.toUpperCase());
+}
+
+function extractErrorMessage(body: unknown): { message: string; fieldErrors?: Record<string, string[]> } {
+  if (!body || typeof body !== 'object') {
+    return { message: 'Something went wrong. Please try again.' };
+  }
+
+  const data = body as Record<string, unknown>;
+
+  if (typeof data.detail === 'string') {
+    return { message: data.detail };
+  }
+
+  const fieldErrors: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+      fieldErrors[key] = value as string[];
+    }
+  }
+
+  const entries = Object.entries(fieldErrors);
+  if (entries.length > 0) {
+    const [firstField, firstMessages] = entries[0];
+    const prefix = firstField === 'non_field_errors' ? '' : `${humanizeFieldName(firstField)}: `;
+    return { message: `${prefix}${firstMessages[0]}`, fieldErrors };
+  }
+
+  return { message: 'Something went wrong. Please try again.' };
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await secureStorage.get('auth_token');
+
+  let response: Response;
+  try {
+    response = await fetch(`${env.apiBaseUrl}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Token ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (networkError) {
+    if (__DEV__) console.error('[apiClient] network error', path, networkError);
+    throw new ApiError(0, "We couldn't connect to Falcon Rider. Check your connection and try again.");
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const { message, fieldErrors } = extractErrorMessage(body);
+    if (__DEV__) console.error('[apiClient] error response', response.status, path, body);
+    throw new ApiError(response.status, message, fieldErrors);
+  }
+
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+
+export const apiClient = {
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+};
+
+================================================================================
+FILE: src/services/storage/secure-storage.ts
+================================================================================
+import * as SecureStore from 'expo-secure-store';
+
+export const secureStorage = {
+  get: (key: string) => SecureStore.getItemAsync(key),
+  set: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  remove: (key: string) => SecureStore.deleteItemAsync(key),
+};
+
+================================================================================
+FILE: src/app/_layout.tsx
+================================================================================
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Stack } from 'expo-router';
+import { useEffect, type PropsWithChildren } from 'react';
+
+import { useMe } from '@/features/auth/hooks/useMe';
+import { useHydrateAuth } from '@/hooks/use-hydrate-auth';
+import { queryClient } from '@/lib/query-client';
+import { secureStorage } from '@/services/storage/secure-storage';
+import { useAuthStore } from '@/store/auth.store';
+import { env } from '@/config/env';
+
+function AuthGate({ children }: PropsWithChildren) {
+  const isHydrated = useHydrateAuth();
+  const clearSession = useAuthStore((s) => s.clearSession);
+  const isSignedIn = useAuthStore((s) => Boolean(s.token));
+
+  const { error } = useMe();
+
+  useEffect(() => {
+    if (env.devAuthBypassEnabled) return;
+
+    if (error) {
+      secureStorage.remove('auth_token');
+      clearSession();
+    }
+  }, [error, clearSession]);
+
+  if (!isHydrated) return null;
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
+  const isSignedIn = useAuthStore((s) => Boolean(s.token));
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthGate>
+        <Stack>
+          <Stack.Protected guard={isSignedIn}>
+            <Stack.Screen
+              name="(tabs)"
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="journey"
+              options={{ headerShown: false }}
+            />
+          </Stack.Protected>
+
+          <Stack.Protected guard={!isSignedIn}>
+            <Stack.Screen
+              name="auth"
+              options={{ headerShown: false }}
+            />
+          </Stack.Protected>
+        </Stack>
+      </AuthGate>
+    </QueryClientProvider>
+  );
+}
+
+================================================================================
+FILE: src/app/auth/welcome.tsx
+================================================================================
+import { useRouter } from 'expo-router';
+import { StyleSheet } from 'react-native';
+
+import { Screen } from '@/components/layout/Screen';
+import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/Button';
+import { Logo } from '@/components/ui/logo';
+import { Spacing } from '@/constants/theme';
+import { env } from '@/config/env';
+import { useAuthStore } from '@/store/auth.store';
+
+const DEV_USER = {
+  id: 'dev-user-falcon-rider',
+  phone_number: '+255700000000',
+  full_name: 'Falcon Rider Test User',
+  role: 'PASSENGER',
+  status: 'ACTIVE',
+  created_at: new Date().toISOString(),
+};
+
+export default function WelcomeScreen() {
+  const router = useRouter();
+  const setSession = useAuthStore((s) => s.setSession);
+
+  const onDevBypass = () => {
+    const devToken = 'dev-token-falcon-rider';
+
+    setSession(devToken, DEV_USER as any);
+
+    router.replace('/(tabs)');
+  };
+
+  return (
+    <Screen style={styles.content}>
+      <Logo size={64} />
+
+      <ThemedText type="title" style={styles.center}>
+        Falcon Rider
+      </ThemedText>
+
+      <ThemedText
+        type="subtitle"
+        themeColor="textSecondary"
+        style={styles.center}
+      >
+        Make Every Commute Better
+      </ThemedText>
+
+      <Button
+        label="Get started"
+        onPress={() => router.push('/auth/phone')}
+      />
+
+      {env.devAuthBypassEnabled ? (
+        <Button
+          label="Continue as test user (dev only)"
+          variant="secondary"
+          onPress={onDevBypass}
+        />
+      ) : null}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: {
+    justifyContent: 'center',
+    gap: Spacing.three,
+  },
+  center: {
+    textAlign: 'center',
+  },
+});
+
+================================================================================
+FILE: src/app/auth/phone.tsx
+================================================================================
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { StyleSheet } from 'react-native';
+
+import { Screen } from '@/components/layout/Screen';
+import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Spacing } from '@/constants/theme';
+import { useRegister } from '@/features/auth/hooks/useRegister';
+import {
+  registrationSchema,
+  type RegistrationFormValues,
+} from '@/features/auth/schemas/auth.schema';
+
+export default function PhoneScreen() {
+  const router = useRouter();
+  const register = useRegister();
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { control, handleSubmit, formState } =
+    useForm<RegistrationFormValues>({
+      resolver: zodResolver(registrationSchema),
+      defaultValues: {
+        fullName: '',
+        phoneNumber: '+255',
+      },
+    });
+
+  const onSubmit = handleSubmit(async ({ fullName, phoneNumber }) => {
+    setFormError(null);
+
+    try {
+      await register.mutateAsync({
+        fullName,
+        phoneNumber,
+      });
+
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.log('REGISTER ERROR:', error);
+
+      setFormError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
+
+  return (
+    <Screen style={styles.content}>
+      <ThemedText type="title">Create your account</ThemedText>
+
+      <ThemedText type="default" themeColor="textSecondary">
+        Enter your details to get started with Falcon Rider.
+      </ThemedText>
+
+      <Controller
+        control={control}
+        name="fullName"
+        render={({ field }) => (
+          <Input
+            label="Full name"
+            autoCapitalize="words"
+            autoFocus
+            value={field.value}
+            onChangeText={field.onChange}
+            error={formState.errors.fullName?.message}
+          />
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="phoneNumber"
+        render={({ field }) => (
+          <Input
+            label="Phone number"
+            keyboardType="phone-pad"
+            value={field.value}
+            onChangeText={field.onChange}
+            error={formState.errors.phoneNumber?.message}
+          />
+        )}
+      />
+
+      {formError ? (
+        <ThemedText themeColor="danger" type="small">
+          {formError}
+        </ThemedText>
+      ) : null}
+
+      <Button
+        label="Create account"
+        onPress={onSubmit}
+        loading={register.isPending}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: {
+    gap: Spacing.three,
+  },
+});
+
+================================================================================
+FILE: src/features/auth/api/auth.api.ts
+================================================================================
+
+import { apiClient } from '@/services/api/client';
+import type {
+  User,
+  RegisterResponse,
+} from '@/features/auth/types/auth.types';
+
+export const authApi = {
+  register: (phoneNumber: string, fullName: string) =>
+    apiClient.post<RegisterResponse>('/auth/register/', {
+      phone_number: phoneNumber,
+      full_name: fullName,
+    }),
+
+  logout: () =>
+    apiClient.post<{ detail: string }>('/auth/logout/'),
+
+  getMe: () =>
+    apiClient.get<User>('/auth/me/'),
+};
+
+================================================================================
+FILE: src/features/auth/hooks/useMe.ts
+================================================================================
+import { useQuery } from '@tanstack/react-query';
+
+import { authApi } from '@/features/auth/api/auth.api';
+import { useAuthStore } from '@/store/auth.store';
+import { env } from '@/config/env';
+
+export function useMe() {
+  const token = useAuthStore((s) => s.token);
+
+  return useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: authApi.getMe,
+    enabled: Boolean(token) && !env.devAuthBypassEnabled,
+  });
+}
+
+================================================================================
+FILE: src/features/auth/hooks/useLogout.ts
+================================================================================
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+import { authApi } from '@/features/auth/api/auth.api';
+import { secureStorage } from '@/services/storage/secure-storage';
+import { useAuthStore } from '@/store/auth.store';
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  const clearSession = useAuthStore((s) => s.clearSession);
+
+  return useMutation({
+    mutationFn: () => authApi.logout(),
+    // onSettled, not onSuccess: clear local session even if the network call
+    // fails (weak connectivity) — the person must still be able to log out.
+    onSettled: async () => {
+      await secureStorage.remove('auth_token');
+      clearSession();
+      queryClient.clear();
+    },
+  });
+}
+
+================================================================================
+FILE: src/features/auth/types/auth.types.ts
+================================================================================
+
+export type UserRole = 'PASSENGER' | 'PROVIDER' | 'ADMIN';
+
+export type UserStatus = 'ACTIVE' | 'SUSPENDED';
+
+export type User = {
+  id: string;
+  phone_number: string;
+  full_name: string;
+  role: UserRole;
+  status: UserStatus;
+  created_at: string;
+};
+
+export type RegisterResponse = {
+  token: string;
+  user: User;
+};
+
+================================================================================
+FILE: src/config/env.ts
+================================================================================
+const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+if (!apiBaseUrl) {
+  throw new Error(
+    'EXPO_PUBLIC_API_BASE_URL is not configured. Check your .env file.',
+  );
+}
+
+export const env = {
+  apiBaseUrl,
+  // __DEV__ is always false in a release build, so this stays inert even if
+  // the env var accidentally ships in a production .env file.
+  devAuthBypassEnabled: __DEV__ && process.env.EXPO_PUBLIC_DEV_AUTH_BYPASS === 'true',
+} as const;
+
+================================================================================
+FILE: src/constants/theme.ts
+================================================================================
+export type ThemeColor =
+  | 'text'
+  | 'background'
+  | 'backgroundElement'
+  | 'backgroundSelected'
+  | 'textSecondary'
+  | 'primary'
+  | 'primaryDark'
+  | 'border'
+  | 'danger';
+
+export const Spacing = {
+  one: 4,
+  two: 8,
+  three: 12,
+  four: 16,
+  five: 20,
+  six: 24,
+  seven: 32,
+  eight: 40,
+  nine: 48,
+  ten: 64,
+} as const;
+export const Colors = {
+  light: {
+    text: '#17211C',
+    background: '#FFFFFF',
+    backgroundElement: '#F5F8F6',
+    backgroundSelected: '#E9F7F0',
+    textSecondary: '#68736D',
+    primary: '#18A66A',
+    primaryDark: '#087A4B',
+    border: '#E7ECE9',
+    danger: '#D94B4B',
+  },
+
+  dark: {
+    text: '#FFFFFF',
+    background: '#17211C',
+    backgroundElement: '#202B25',
+    backgroundSelected: '#173D2D',
+    textSecondary: '#AAB5AF',
+    primary: '#18A66A',
+    primaryDark: '#087A4B',
+    border: '#35413A',
+    danger: '#D94B4B',
+  },
+} as const;
+
+export const Fonts = {
+  sans: 'System',
+  mono: 'monospace',
+} as const;
+
+================================================================================
+FILE: src/lib/query-client.ts
+================================================================================
+import { QueryClient } from '@tanstack/react-query';
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 2,
+    },
+  },
+});
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "mobile",
+  "main": "expo-router/entry",
+  "version": "1.0.0",
+  "dependencies": {
+    "@expo/ui": "~57.0.18",
+    "@hookform/resolvers": "^5.9.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "9.1.0",
+    "@react-native-community/netinfo": "12.0.1",
+    "@tanstack/react-query": "^5.103.1",
+    "expo": "~57.0.23",
+    "expo-constants": "~57.0.18",
+    "expo-device": "~57.0.2",
+    "expo-font": "~57.0.4",
+    "expo-glass-effect": "~57.0.3",
+    "expo-image": "~57.0.5",
+    "expo-linking": "~57.0.10",
+    "expo-location": "~57.0.18",
+    "expo-router": "~57.0.21",
+    "expo-secure-store": "~57.0.4",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "expo-symbols": "~57.0.3",
+    "expo-system-ui": "~57.0.4",
+    "expo-web-browser": "~57.0.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.88.0",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "reset-project": "node ./scripts/reset-project.js",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint"
+  },
+  "private": true
+}
+
+================================================================================
+FILE: tsconfig.json
+================================================================================
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}
+
+
+================================================================================
+FILE: src/app/(tabs)/_layout.tsx
+================================================================================
+import { Tabs } from 'expo-router';
+
+export default function TabsLayout() {
+  return (
+    <Tabs>
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="journeys" options={{ title: 'Journeys' }} />
+      <Tabs.Screen name="account" options={{ title: 'Account' }} />
+    </Tabs>
+  );
+}
+
+================================================================================
+FILE: src/app/(tabs)/account.tsx
+================================================================================
+import { StyleSheet } from 'react-native';
+
+import { ErrorState } from '@/components/feedback/ErrorState';
+import { LoadingState } from '@/components/feedback/LoadingState';
+import { Screen } from '@/components/layout/Screen';
+import { ThemedText } from '@/components/themed-text';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Spacing } from '@/constants/theme';
+import { useLogout } from '@/features/auth/hooks/useLogout';
+import { useMe } from '@/features/auth/hooks/useMe';
+
+export default function AccountScreen() {
+  const { data: user, isLoading, error, refetch } = useMe();
+  const logout = useLogout();
+
+  if (isLoading) return <LoadingState message="Loading your account…" />;
+  if (error || !user) return <ErrorState error={error} onRetry={refetch} />;
+
+  return (
+    <Screen style={styles.content}>
+      <Avatar name={user.full_name || user.phone_number} size={64} />
+      <ThemedText type="title">{user.full_name || 'Falcon Rider user'}</ThemedText>
+      <ThemedText type="default" themeColor="textSecondary">{user.phone_number}</ThemedText>
+      <Badge label={user.role} />
+      <Button label="Log out" variant="secondary" onPress={() => logout.mutate()} loading={logout.isPending} />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({ content: { gap: Spacing.two } });
+
+================================================================================
+FILE: src/components/ui/Button.tsx
+================================================================================
+import { ActivityIndicator, Pressable, StyleSheet, type PressableProps } from 'react-native';
+
+import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+type ButtonVariant = 'primary' | 'secondary' | 'danger';
+
+type ButtonProps = Omit<PressableProps, 'style'> & {
+  label: string;
+  variant?: ButtonVariant;
+  loading?: boolean;
+};
+
+export function Button({ label, variant = 'primary', loading, disabled, ...rest }: ButtonProps) {
+  const theme = useTheme();
+  const isDisabled = disabled || loading;
+
+  const backgroundColor =
+    variant === 'primary' ? theme.primary : variant === 'danger' ? theme.danger : theme.backgroundElement;
+  const textColor = variant === 'secondary' ? theme.text : '#FFFFFF';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled }}
+      disabled={isDisabled}
+      style={({ pressed }) => [
+        styles.base,
+        { backgroundColor, opacity: isDisabled ? 0.5 : pressed ? 0.85 : 1 },
+      ]}
+      {...rest}
+    >
+      {loading ? (
+        <ActivityIndicator color={textColor} />
+      ) : (
+        <ThemedText type="smallBold" style={{ color: textColor }}>
+          {label}
+        </ThemedText>
+      )}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    minHeight: 48,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+  },
+});
+
+================================================================================
+FILE: src/components/ui/Input.tsx
+================================================================================
+import { forwardRef } from 'react';
+import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+
+import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+type InputProps = TextInputProps & {
+  label?: string;
+  error?: string;
+};
+
+export const Input = forwardRef<TextInput, InputProps>(({ label, error, style, ...rest }, ref) => {
+  const theme = useTheme();
+
+  return (
+    <View style={styles.wrapper}>
+      {label ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {label}
+        </ThemedText>
+      ) : null}
+      <TextInput
+        ref={ref}
+        placeholderTextColor={theme.textSecondary}
+        style={[
+          styles.input,
+          { borderColor: error ? theme.danger : theme.border, color: theme.text, backgroundColor: theme.background },
+          style,
+        ]}
+        accessibilityLabel={label}
+        {...rest}
+      />
+      {error ? (
+        <ThemedText type="small" themeColor="danger">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+});
+Input.displayName = 'Input';
+
+const styles = StyleSheet.create({
+  wrapper: { gap: Spacing.one },
+  input: { minHeight: 48, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
+});
+
+================================================================================
+FILE: src/components/layout/Screen.tsx
+================================================================================
+import { StyleSheet, type ViewProps } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { NetworkBanner } from '@/components/feedback/NetworkBanner';
+import { ThemedView } from '@/components/themed-view';
+import { Spacing } from '@/constants/theme';
+
+export function Screen({ style, children, ...rest }: ViewProps) {
+  return (
+    <ThemedView style={styles.flex}>
+      <NetworkBanner />
+      <SafeAreaView style={[styles.safeArea, style]} {...rest}>
+        {children}
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  safeArea: { flex: 1, padding: Spacing.four },
+});
+
+================================================================================
+FILE: src/components/themed-text.tsx
+================================================================================
+
+import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+
+import { Fonts, type ThemeColor } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+export type ThemedTextProps = TextProps & {
+  type?:
+    | 'default'
+    | 'title'
+    | 'small'
+    | 'smallBold'
+    | 'subtitle'
+    | 'link'
+    | 'linkPrimary'
+    | 'code';
+
+  themeColor?: ThemeColor;
+};
+
+export function ThemedText({
+  style,
+  type = 'default',
+  themeColor = 'text',
+  ...rest
+}: ThemedTextProps) {
+  const theme = useTheme();
+
+  return (
+    <Text
+      style={[
+        { color: theme[themeColor] },
+
+        type === 'default' && styles.default,
+        type === 'title' && styles.title,
+        type === 'small' && styles.small,
+        type === 'smallBold' && styles.smallBold,
+        type === 'subtitle' && styles.subtitle,
+        type === 'link' && styles.link,
+        type === 'linkPrimary' && styles.linkPrimary,
+        type === 'code' && styles.code,
+
+        style,
+      ]}
+      {...rest}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  small: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+
+  smallBold: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+
+  default: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+
+  title: {
+    fontSize: 48,
+    fontWeight: '600',
+    lineHeight: 52,
+  },
+
+  subtitle: {
+    fontSize: 32,
+    lineHeight: 44,
+    fontWeight: '600',
+  },
+
+  link: {
+    lineHeight: 30,
+    fontSize: 14,
+  },
+
+  linkPrimary: {
+    lineHeight: 30,
+    fontSize: 14,
+    color: '#18A66A',
+  },
+
+  code: {
+    fontFamily: Fonts.mono,
+    fontWeight: Platform.select({
+      android: '700',
+      default: '500',
+    }),
+    fontSize: 12,
+  },
+});
+
+================================================================================
+FILE: src/components/themed-view.tsx
+================================================================================
+import { View, type ViewProps } from 'react-native';
+
+import { ThemeColor } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+export type ThemedViewProps = ViewProps & {
+  lightColor?: string;
+  darkColor?: string;
+  type?: ThemeColor;
+};
+
+export function ThemedView({ style, lightColor, darkColor, type, ...otherProps }: ThemedViewProps) {
+  const theme = useTheme();
+
+  return <View style={[{ backgroundColor: theme[type ?? 'background'] }, style]} {...otherProps} />;
+}
+
+================================================================================
+FILE: src/utils/error-messages.ts
+================================================================================
+import { ApiError } from '@/services/api/client';
+
+export function toUserMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status >= 500) return 'Something went wrong on our end. Please try again shortly.';
+    if (error.status === 401) return 'Please log in again to continue.';
+    return error.message || 'Something went wrong. Please try again.';
+  }
+  return 'Something went wrong. Please check your connection and try again.';
+}
