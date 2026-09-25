@@ -30,14 +30,16 @@ INSTALLED_APPS = [
     "apps.bookings",
     "apps.journeys",
     "apps.payments",
-        "apps.safety",
+    "apps.safety",
     "apps.disputes",    
     "apps.refund_requests",
     "apps.payouts",
     "apps.receipts",
     "apps.governance",
     "apps.admin_ops",
+    "apps.ratings"
     "core",   
+    
 ]
 
 MIDDLEWARE = [

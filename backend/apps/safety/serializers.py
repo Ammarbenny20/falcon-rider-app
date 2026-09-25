@@ -14,8 +14,7 @@ class EmergencyContactSerializer(serializers.ModelSerializer):
 class SosAlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = SosAlert
-        fields = ["id", "journey", "location", "message", "resolved", "created_at"]
-
+        fields = ["id", "journey", "alert_type", "location", "message", "resolved", "created_at"]
 
 class TripShareSerializer(serializers.ModelSerializer):
     class Meta:

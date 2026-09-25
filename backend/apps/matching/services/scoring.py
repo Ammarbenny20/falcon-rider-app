@@ -54,6 +54,8 @@ def compute_match_score(rider_request, journey_plan):
         destination proximity  40%
         time alignment         20%
     """
+    if not _gender_compatible(rider_request, journey_plan):
+        return None
     if journey_plan.available_seats < rider_request.seats_needed:
         return None
     if journey_plan.status != "PUBLISHED":
@@ -97,3 +99,28 @@ def compute_fare_share(rider_request, journey_plan):
     Later can factor in distance, traffic, demand, discounts.
     """
     return journey_plan.price_per_seat * rider_request.seats_needed
+
+def _gender_compatible(rider_request, journey_plan):
+    """Hard filter for the women-only / men-only ride preference."""
+    passenger_gender = rider_request.passenger.user.gender
+
+    if journey_plan.gender_restriction == "FEMALE_ONLY" and passenger_gender != "FEMALE":
+        return False
+    if journey_plan.gender_restriction == "MALE_ONLY" and passenger_gender != "MALE":
+        return False
+
+    pref = rider_request.preferred_copassenger_gender
+    if pref != "ANY" and journey_plan.gender_restriction == "ANY":
+        from apps.bookings.models import Booking
+        wanted = "FEMALE" if pref == "FEMALE_ONLY" else "MALE"
+        has_other_gender = (
+            Booking.objects.filter(journey_plan=journey_plan)
+            .exclude(status="CANCELLED")
+            .exclude(passenger__user__gender=wanted)
+            .exclude(passenger__user__gender="UNSPECIFIED")
+            .exists()
+        )
+        if has_other_gender:
+            return False
+
+    return True

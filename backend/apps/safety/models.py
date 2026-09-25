@@ -39,3 +39,21 @@ class TripShare(models.Model):
     class Meta:
         db_table = "safety_tripshare"
 
+class SosAlertType(models.TextChoices):
+    POLICE = "POLICE", "Police"
+    MEDICAL = "MEDICAL", "Medical"
+    GENERAL = "GENERAL", "General / Other"
+
+
+class SosAlert(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="sos_alerts")
+    journey = models.ForeignKey("journeys.Journey", on_delete=models.SET_NULL, null=True, blank=True, related_name="sos_alerts")
+    alert_type = models.CharField(max_length=20, choices=SosAlertType.choices, default=SosAlertType.GENERAL)   # <-- NEW
+    location = models.CharField(max_length=100, blank=True, null=True)
+    message = models.TextField(null=True, blank=True)
+    resolved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "safety_sosalert"

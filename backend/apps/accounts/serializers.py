@@ -35,7 +35,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "email", "phone_number", "full_name",
+            "id", "email", "phone_number", "full_name", "gender",
             "role", "status", "is_verified",
             "provider_status", "provider_profile", "created_at",
         ]
@@ -59,7 +59,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["full_name", "phone_number"]
+        fields = ["full_name", "phone_number", "gender"]
 
     def validate_phone_number(self, value):
         if value in ("", None):

@@ -17,12 +17,17 @@ class UserStatus(models.TextChoices):
     SUSPENDED = "SUSPENDED", "Suspended"
     DELETED = "DELETED", "Deleted"
 
+class Gender(models.TextChoices):
+    MALE = "MALE", "Male"
+    FEMALE = "FEMALE", "Female"
+    UNSPECIFIED = "UNSPECIFIED", "Prefer not to say"
 
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, db_index=True, null=True, blank=True)
     phone_number = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
     full_name = models.CharField(max_length=150)
+    gender = models.CharField(max_length=20, choices=Gender.choices, default=Gender.UNSPECIFIED)
     role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.PASSENGER)
     status = models.CharField(max_length=20, choices=UserStatus.choices, default=UserStatus.ACTIVE)
     is_verified = models.BooleanField(default=False)
