@@ -144,6 +144,17 @@ class CommunityJourneyJoinView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if plan.gender_restriction == "FEMALE_ONLY" and request.user.gender != "FEMALE":
+            return Response(
+                {"detail": "This journey is reserved for female passengers only."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if plan.gender_restriction == "MALE_ONLY" and request.user.gender != "MALE":
+            return Response(
+                {"detail": "This journey is reserved for male passengers only."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             seats = int(request.data.get("seats", 1))
         except (TypeError, ValueError):

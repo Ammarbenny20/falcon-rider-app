@@ -7,6 +7,10 @@ class JourneyType(models.TextChoices):
     PROFESSIONAL = "PROFESSIONAL", "Professional Service"
     COMMUNITY_JOURNEY = "COMMUNITY_JOURNEY", "Community Journey"
 
+class GenderRestriction(models.TextChoices):
+    ANY = "ANY", "Any"
+    FEMALE_ONLY = "FEMALE_ONLY", "Female passengers only"
+    MALE_ONLY = "MALE_ONLY", "Male passengers only"
 
 class JourneyPlanStatus(models.TextChoices):
     DRAFT = "DRAFT", "Draft"
@@ -31,6 +35,10 @@ class JourneyPlan(models.Model):
     journey_type = models.CharField(
         max_length=30, choices=JourneyType.choices,
         default=JourneyType.PROFESSIONAL,
+    )
+    gender_restriction = models.CharField(
+        max_length=20, choices=GenderRestriction.choices, 
+        default=GenderRestriction.ANY,
     )
     origin = models.CharField(max_length=100, blank=True, null=True)
     origin_label = models.CharField(max_length=255)

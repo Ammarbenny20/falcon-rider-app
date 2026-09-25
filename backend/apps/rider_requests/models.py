@@ -62,6 +62,11 @@ class RiderRequest(models.Model):
     transport_mode = models.CharField(
         max_length=20, choices=TransportMode.choices, null=True, blank=True,
     )
+    preferred_copassenger_gender = models.CharField(     # <-- NEW
+        max_length=20, choices=CopassengerGenderPreference.choices,
+        default=CopassengerGenderPreference.ANY,
+    )
+    status = models.CharField(...)
     status = models.CharField(
         max_length=30, choices=RiderRequestStatus.choices,
         default=RiderRequestStatus.SUBMITTED,
@@ -81,3 +86,7 @@ class RiderRequest(models.Model):
     def __str__(self):
         return f"RiderRequest<{self.id}>"
 
+class CopassengerGenderPreference(models.TextChoices):
+    ANY = "ANY", "Any"
+    FEMALE_ONLY = "FEMALE_ONLY", "Female passengers only"
+    MALE_ONLY = "MALE_ONLY", "Male passengers only"

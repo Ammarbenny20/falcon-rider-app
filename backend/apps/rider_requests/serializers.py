@@ -15,7 +15,8 @@ class RiderRequestCreateSerializer(serializers.ModelSerializer):
             "id", "origin", "destination", "requested_time",
             "scheduled_for", "is_scheduled",
             "seats_needed", "booking_type", "ride_access_type",
-            "transport_mode", "status", "created_at",
+            "transport_mode", "preferred_copassenger_gender",   # <-- add here (both serializers)
+            "status", "created_at",
         ]
         read_only_fields = ["id", "status", "created_at"]
 

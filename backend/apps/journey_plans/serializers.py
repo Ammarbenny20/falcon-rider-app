@@ -17,7 +17,7 @@ class JourneyPlanReadSerializer(serializers.ModelSerializer):
         fields = [
             "id", "provider_id", "vehicle_id", "origin", "destination",
             "scheduled_departure_time", "total_seats", "available_seats",
-            "price_per_seat", "status", "created_at",
+            "price_per_seat", "gender_restriction","status", "created_at",
         ]
 
 
@@ -31,7 +31,7 @@ class JourneyPlanCreateSerializer(serializers.ModelSerializer):
         fields = [
             "id", "vehicle_id", "origin", "destination",
             "scheduled_departure_time", "total_seats", "price_per_seat",
-            "status", "created_at",
+            "gender_restriction", "status", "created_at",
         ]
         read_only_fields = ["id", "status", "created_at"]
 

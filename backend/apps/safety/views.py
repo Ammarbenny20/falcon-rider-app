@@ -31,12 +31,16 @@ class SosAlertCreateView(APIView):
         lat = request.data.get("latitude")
         lng = request.data.get("longitude")
         message = request.data.get("message", "")
+        alert_type = (request.data.get("alert_type") or "GENERAL").upper()
+        if alert_type not in ("POLICE", "MEDICAL", "GENERAL"):
+            alert_type = "GENERAL"
 
         loc = f"{float(lng)},{float(lat)}" if (lat and lng) else None
 
         alert = SosAlert.objects.create(
             user=request.user,
             journey_id=journey_id,
+            alert_type=alert_type,
             location=loc,
             message=message,
         )
@@ -45,7 +49,6 @@ class SosAlertCreateView(APIView):
         except Exception:
             pass
         return Response(SosAlertSerializer(alert).data, status=status.HTTP_201_CREATED)
-
 
 class TripShareCreateView(APIView):
     def post(self, request):
