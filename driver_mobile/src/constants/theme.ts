@@ -1,4 +1,10 @@
-// src/constants/theme.ts
+﻿// src/constants/theme.ts
+// ============================================
+// FALCON RIDER - DRIVER APP THEME
+// Uses shared design tokens
+// ============================================
+
+import { colors, fonts, spacing, radius } from '../shared/tokens';
 
 export type ThemeColor =
   | 'text'
@@ -9,46 +15,50 @@ export type ThemeColor =
   | 'backgroundSelected'
   | 'primary'
   | 'primaryDark'
+  | 'primaryLight'
   | 'border'
   | 'danger'
   | 'warning'
   | 'success'
   | 'info';
 
-export const Colors = {
-  light: {
-    text: '#17211C',
-    textSecondary: '#68736D',
-    textTertiary: '#9CA69F',
-    background: '#FFFFFF',
-    backgroundElement: '#F5F8F6',
-    backgroundSelected: '#E9F7F0',
-    primary: '#18A66A',
-    primaryDark: '#087A4B',
-    border: '#E7ECE9',
-    danger: '#D94B4B',
-    warning: '#F5A524',
-    success: '#30A46C',
-    info: '#0091FF',
-  },
-  dark: {
-    text: '#FFFFFF',
-    textSecondary: '#AAB5AF',
-    textTertiary: '#7A857F',
-    background: '#17211C',
-    backgroundElement: '#202B25',
-    backgroundSelected: '#173D20',
-    primary: '#18A66A',
-    primaryDark: '#087A4B',
-    border: '#35413A',
-    danger: '#FF6369',
-    warning: '#FFB224',
-    success: '#30A46C',
-    info: '#52A9FF',
-  },
-} as const;
+// ─── Falcon Rider Brand Colors ───────────────────────────────────────
+// Primary: #16A34A (Falcon Green)
+// Dark: #166534
+// Light: #DCFCE7
 
-export const Fonts = {
-  sans: 'System',
-  mono: 'monospace',
-} as const;
+export const theme = {
+  colors: {
+    // Backgrounds
+    background: colors.white,
+    backgroundElement: colors.gray50,
+    backgroundSelected: colors.lightGreen,
+
+    // Text
+    text: colors.navy,
+    textSecondary: colors.gray500,
+    textTertiary: colors.gray500,
+
+    // Brand
+    primary: colors.primaryGreen,
+    primaryDark: colors.darkGreen,
+    primaryLight: colors.lightGreen,
+
+    // Status
+    danger: colors.errorRed,
+    warning: colors.amber,
+    success: colors.primaryGreen,
+    info: colors.navy,
+
+    // Borders
+    border: colors.gray200,
+
+    // CTA
+    cta: colors.amber,
+  },
+  fonts,
+  spacing,
+  radius,
+};
+
+export default theme;

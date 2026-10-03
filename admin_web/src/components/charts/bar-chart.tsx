@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 /**
- * Falcon Rider Admin Portal — Bar Chart
+ * Falcon Rider Admin Portal â€” Bar Chart
  */
 
 import {
@@ -33,7 +33,7 @@ interface BarChartProps {
   layout?: 'horizontal' | 'vertical';
 }
 
-const DEFAULT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const DEFAULT_COLORS = ['#0F172A', '#16A34A', '#f59e0b', '#DC2626', '#16A34A'];
 
 export function BarChart({
   title,

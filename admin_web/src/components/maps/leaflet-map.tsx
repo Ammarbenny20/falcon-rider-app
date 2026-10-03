@@ -28,10 +28,10 @@ interface LeafletMapProps {
 }
 
 const MARKER_COLORS: Record<string, string> = {
-  PROVIDER: '#10b981',
-  TRIP: '#3b82f6',
-  JOURNEY: '#6366f1',
-  INCIDENT: '#ef4444',
+  PROVIDER: '#16A34A',
+  TRIP: '#0F172A',
+  JOURNEY: '#0F172A',
+  INCIDENT: '#DC2626',
 };
 
 export function LeafletMap({
@@ -86,7 +86,7 @@ export function LeafletMap({
 
       // Add markers
       markers.forEach((marker) => {
-        const color = MARKER_COLORS[marker.type ?? 'PROVIDER'] ?? '#6b7280';
+        const color = MARKER_COLORS[marker.type ?? 'PROVIDER'] ?? '#64748B';
 
         // Custom colored marker
         const icon = L.divIcon({

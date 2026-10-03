@@ -1,0 +1,15 @@
+﻿{
+  "name": "@falcon-rider/design-tokens",
+  "version": "1.0.0",
+  "description": "Falcon Rider Design System - Single Source of Truth",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./tokens": "./design-tokens/tokens.js",
+    "./email": "./design-tokens/emailTheme.js"
+  },
+  "keywords": ["falcon-rider", "design-system", "tokens"],
+  "author": "Falcon Rider Team",
+  "license": "MIT"
+}

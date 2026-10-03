@@ -1,4 +1,4 @@
-﻿// src/components/ui/Logo.tsx
+// src/components/ui/Logo.tsx
 
 import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
 
@@ -21,9 +21,6 @@ const SIZE_MAP: Record<LogoSize, number> = {
   '2xl': 200,
 };
 
-// Falcon Rider green — matches the logo
-const FALCON_GREEN = '#25D366';
-
 export function Logo({
   size = 'md',
   variant = 'circle',
@@ -40,7 +37,6 @@ export function Logo({
           width: dimension,
           height: dimension,
           borderRadius: isCircle ? dimension / 2 : Radii.md,
-          backgroundColor: FALCON_GREEN,
         },
         isCircle && Shadows.lg,
         style,
@@ -48,11 +44,7 @@ export function Logo({
     >
       <Image
         source={require('@/assets/images/logo.png')}
-        style={{
-          width: dimension * 0.75,
-          height: dimension * 0.75,
-          resizeMode: 'contain',
-        }}
+        style={styles.image}
       />
     </View>
   );
@@ -63,5 +55,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
 });

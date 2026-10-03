@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 /**
- * Falcon Rider Admin Portal — Line Chart
+ * Falcon Rider Admin Portal â€” Line Chart
  */
 
 import {
@@ -32,7 +32,7 @@ interface LineChartProps {
   formatter?: (value: number) => string;
 }
 
-const DEFAULT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const DEFAULT_COLORS = ['#0F172A', '#16A34A', '#f59e0b', '#DC2626', '#16A34A'];
 
 export function LineChart({
   title,

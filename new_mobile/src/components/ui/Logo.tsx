@@ -1,4 +1,4 @@
-// src/components/ui/Logo.tsx
+﻿// src/components/ui/Logo.tsx
 
 import { Image, StyleSheet, View, type ViewStyle } from 'react-native';
 
@@ -21,8 +21,7 @@ const SIZE_MAP: Record<LogoSize, number> = {
   '2xl': 200,
 };
 
-// Green that matches the logo's background
-const LOGO_GREEN = '#0B4A2E';
+const FALCON_GREEN = '#25D366';
 
 export function Logo({
   size = 'md',
@@ -40,7 +39,7 @@ export function Logo({
           width: dimension,
           height: dimension,
           borderRadius: isCircle ? dimension / 2 : Radii.md,
-          backgroundColor: LOGO_GREEN,
+          backgroundColor: FALCON_GREEN,
         },
         isCircle && Shadows.lg,
         style,

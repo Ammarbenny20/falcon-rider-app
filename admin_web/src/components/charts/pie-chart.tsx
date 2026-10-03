@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 /**
- * Falcon Rider Admin Portal — Pie Chart
+ * Falcon Rider Admin Portal â€” Pie Chart
  */
 
 import {
@@ -32,8 +32,8 @@ interface PieChartProps {
 }
 
 const DEFAULT_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#a855f7',
+  '#0F172A', '#16A34A', '#f59e0b', '#DC2626', '#16A34A',
+  '#ec4899', '#14b8a6', '#F59E0B', '#0F172A', '#16A34A',
 ];
 
 export function PieChart({

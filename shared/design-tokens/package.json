@@ -1,0 +1,6 @@
+﻿{
+  "name": "@falcon-rider/design-tokens",
+  "version": "1.0.0",
+  "main": "tokens.js",
+  "type": "module"
+}

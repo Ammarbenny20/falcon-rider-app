@@ -1,53 +1,64 @@
+﻿// src/constants/theme.ts
+// ============================================
+// FALCON RIDER - PASSENGER APP THEME
+// Uses shared design tokens
+// ============================================
+
+import { colors, fonts, spacing, radius } from '../shared/tokens';
+
 export type ThemeColor =
   | 'text'
+  | 'textSecondary'
+  | 'textTertiary'
   | 'background'
   | 'backgroundElement'
   | 'backgroundSelected'
-  | 'textSecondary'
   | 'primary'
   | 'primaryDark'
+  | 'primaryLight'
   | 'border'
-  | 'danger';
+  | 'danger'
+  | 'warning'
+  | 'success'
+  | 'info';
 
-export const Spacing = {
-  one: 4,
-  two: 8,
-  three: 12,
-  four: 16,
-  five: 20,
-  six: 24,
-  seven: 32,
-  eight: 40,
-  nine: 48,
-  ten: 64,
-} as const;
-export const Colors = {
-  light: {
-    text: '#17211C',
-    background: '#FFFFFF',
-    backgroundElement: '#F5F8F6',
-    backgroundSelected: '#E9F7F0',
-    textSecondary: '#68736D',
-    primary: '#18A66A',
-    primaryDark: '#087A4B',
-    border: '#E7ECE9',
-    danger: '#D94B4B',
+// ─── Falcon Rider Brand Colors ───────────────────────────────────────
+// Primary: #16A34A (Falcon Green)
+// Dark: #166534
+// Light: #DCFCE7
+
+export const theme = {
+  colors: {
+    // Backgrounds
+    background: colors.white,
+    backgroundElement: colors.gray50,
+    backgroundSelected: colors.lightGreen,
+
+    // Text
+    text: colors.navy,
+    textSecondary: colors.gray500,
+    textTertiary: colors.gray500,
+
+    // Brand
+    primary: colors.primaryGreen,
+    primaryDark: colors.darkGreen,
+    primaryLight: colors.lightGreen,
+
+    // Status
+    danger: colors.errorRed,
+    warning: colors.amber,
+    success: colors.primaryGreen,
+    info: colors.navy,
+
+    // Borders
+    border: colors.gray200,
+
+    // CTA
+    cta: colors.amber,
   },
+  fonts,
+  spacing,
+  radius,
+};
 
-  dark: {
-    text: '#FFFFFF',
-    background: '#17211C',
-    backgroundElement: '#202B25',
-    backgroundSelected: '#173D2D',
-    textSecondary: '#AAB5AF',
-    primary: '#18A66A',
-    primaryDark: '#087A4B',
-    border: '#35413A',
-    danger: '#D94B4B',
-  },
-} as const;
-
-export const Fonts = {
-  sans: 'System',
-  mono: 'monospace',
-} as const;
+export default theme;
